@@ -22,6 +22,9 @@ module Akami
     # PasswordDigest URI.
     PASSWORD_DIGEST_URI = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest"
 
+    # NonceEncoding URI.
+    NONCE_ENCODING_TYPE = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary"
+
     # Returns a value from the WSSE Hash.
     def [](key)
       hash[key]
@@ -88,10 +91,12 @@ module Akami
       if digest?
         security_hash :wsse, "UsernameToken",
           "wsse:Username" => username,
-          "wsse:Nonce" => nonce,
+          "wsse:Nonce" => Base64.encode64(nonce).strip,
           "wsu:Created" => timestamp,
           "wsse:Password" => digest_password,
-          :attributes! => { "wsse:Password" => { "Type" => PASSWORD_DIGEST_URI } }
+          :attributes! => { "wsse:Password" => { "Type" => PASSWORD_DIGEST_URI },
+                            "wsse:Nonce" => {"EncodingType" => NONCE_ENCODING_TYPE }
+                          }
       else
         security_hash :wsse, "UsernameToken",
           "wsse:Username" => username,
@@ -115,19 +120,19 @@ module Akami
           "#{namespace}:#{tag}" => hash,
           :attributes! => { "#{namespace}:#{tag}" => { "wsu:Id" => "#{tag}-#{count}", "xmlns:wsu" => WSU_NAMESPACE } }
         },
-        :attributes! => { "wsse:Security" => { "xmlns:wsse" => WSE_NAMESPACE } }
+        :attributes! => { "wsse:Security" => { "xmlns:wsse" => WSE_NAMESPACE, "soapenv:mustUnderstand" => "1" } }
       }
     end
 
     # Returns the WSSE password, encrypted for digest authentication.
     def digest_password
       token = nonce + timestamp + password
-      Base64.encode64(Digest::SHA1.hexdigest(token)).chomp!
+      Base64.encode64(Digest::SHA1.digest(token)).chomp!
     end
 
     # Returns a WSSE nonce.
     def nonce
-      @nonce ||= Digest::SHA1.hexdigest random_string + timestamp
+      @nonce ||= random_string
     end
 
     # Returns a random String of 100 characters.
@@ -137,7 +142,7 @@ module Akami
 
     # Returns a WSSE timestamp.
     def timestamp
-      @timestamp ||= Time.now.xs_datetime
+      @timestamp ||= Time.now.utc.xs_datetime
     end
 
     # Returns a new number with every call.
